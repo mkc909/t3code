@@ -2769,6 +2769,92 @@ describe("OrchestratorMcpService thread list", () => {
   );
 });
 
+describe("OrchestratorMcpService thread archive", () => {
+  const threadId = ThreadId.make("thread:mcp-archive");
+  const client: McpInvocationScope = {
+    environmentId: EnvironmentId.make("environment:thread-archive"),
+    requestNamespace: "client:thread-archive",
+    thread: undefined,
+    client: { sessionId: "thread-archive", label: "Claude Code", access: "full-access" },
+    capabilities: new Set(["orchestration"]),
+    issuedAt: 1,
+  };
+
+  it.effect("archives and unarchives through dispatch, repeating the current state", () =>
+    Effect.gen(function* () {
+      const archivedAt = yield* Ref.make<DateTime.DateTime | null>(null);
+      const dispatched = yield* Ref.make<ReadonlyArray<string>>([]);
+      const projection = (at: DateTime.DateTime | null) =>
+        ({
+          thread: {
+            id: threadId,
+            projectId: ProjectId.make("project:mcp-archive"),
+            archivedAt: at,
+          },
+          runs: [],
+          messages: [],
+          subagents: [],
+          providerThreads: [],
+          providerTurns: [],
+          runtimeRequests: [],
+          contextTransfers: [],
+          turnItems: [],
+        }) as unknown as OrchestrationV2ThreadProjection;
+      const service = layerOrchestratorService.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            NodeServices.layer,
+            Layer.mock(ThreadManagementService.ThreadManagementService)({
+              getThreadShell: (id) => Effect.succeed(liveThreadShell(id)),
+              getProjectThreadRecords: () => Ref.get(archivedAt).pipe(Effect.map(projection)),
+              dispatch: (command) =>
+                Ref.update(dispatched, (types) => [...types, command.type]).pipe(
+                  Effect.andThen(
+                    command.type === "thread.archive"
+                      ? Ref.set(archivedAt, DateTime.makeUnsafe("2026-10-05T00:00:00Z"))
+                      : command.type === "thread.unarchive"
+                        ? Ref.set(archivedAt, null)
+                        : Effect.void,
+                  ),
+                  Effect.as({} as never),
+                ),
+            }),
+            ServerSettings.layerTest(),
+            Layer.mock(ProviderRegistry.ProviderRegistry)({ getProviders: Effect.succeed([]) }),
+            Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({
+              list: () => Effect.succeed([]),
+            }),
+            Layer.mock(ProjectService.ProjectService)({}),
+            Layer.mock(SecretRequests.SecretRequests)({}),
+            Layer.mock(RemoteDelegation.RemoteDelegation)({}),
+            Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+          ),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const mcp = yield* OrchestratorMcpService.OrchestratorMcpService;
+        assert.deepEqual(
+          yield* mcp.archiveThread(client, { threadId, clientRequestId: "archive-1" }),
+          { threadId, archived: true },
+        );
+        assert.deepEqual(
+          yield* mcp.archiveThread(client, { threadId, clientRequestId: "archive-2" }),
+          { threadId, archived: true },
+        );
+        assert.deepEqual(
+          yield* mcp.unarchiveThread(client, { threadId, clientRequestId: "unarchive-1" }),
+          { threadId, archived: false },
+        );
+        assert.deepEqual(
+          yield* mcp.unarchiveThread(client, { threadId, clientRequestId: "unarchive-2" }),
+          { threadId, archived: false },
+        );
+        assert.deepEqual(yield* Ref.get(dispatched), ["thread.archive", "thread.unarchive"]);
+      }).pipe(Effect.provide(service));
+    }),
+  );
+});
+
 describe("OrchestratorMcpService thread stop", () => {
   const driver = ProviderDriverKind.make("codex");
   const instanceId = ProviderInstanceId.make("codex");
