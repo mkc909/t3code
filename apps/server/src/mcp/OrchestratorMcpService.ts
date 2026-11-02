@@ -38,6 +38,8 @@ import {
   type ProjectId,
   type OrchestratorMcpThreadDetail,
   type OrchestratorMcpThreadPullRequest,
+  type OrchestratorMcpThreadArchiveInput,
+  type OrchestratorMcpThreadArchiveResult,
   type OrchestratorMcpThreadInterruptInput,
   type OrchestratorMcpThreadInterruptResult,
   type OrchestratorMcpThreadListInput,
@@ -209,6 +211,14 @@ export interface OrchestratorMcpServiceShape {
     scope: McpInvocationScope,
     input: OrchestratorMcpThreadInterruptInput,
   ) => Effect.Effect<OrchestratorMcpThreadInterruptResult, OrchestratorMcpFailure>;
+  readonly archiveThread: (
+    scope: McpInvocationScope,
+    input: OrchestratorMcpThreadArchiveInput,
+  ) => Effect.Effect<OrchestratorMcpThreadArchiveResult, OrchestratorMcpFailure>;
+  readonly unarchiveThread: (
+    scope: McpInvocationScope,
+    input: OrchestratorMcpThreadArchiveInput,
+  ) => Effect.Effect<OrchestratorMcpThreadArchiveResult, OrchestratorMcpFailure>;
 }
 
 export class OrchestratorMcpService extends Context.Service<
@@ -3153,6 +3163,70 @@ const make = Effect.gen(function* () {
         runId: result.run.id,
         status: result.type === "already_terminal" ? result.run.status : "interrupt_requested",
       } satisfies OrchestratorMcpThreadInterruptResult;
+    }),
+    archiveThread: Effect.fn("OrchestratorMcpService.archiveThread")(function* (scope, input) {
+      const { parent, target } = yield* loadScopedThread(scope, input.threadId);
+      yield* assertLiveCallerForOtherThread(scope, parent, target);
+      // The reducer rejects archiving an archived thread; reporting the
+      // current state instead keeps retries of this tool safe.
+      if (target.thread.archivedAt === null) {
+        const key = yield* requestKey(input.clientRequestId);
+        yield* threadManagement
+          .dispatch({
+            type: "thread.archive",
+            commandId: stableCommandId({
+              scope,
+              requestKey: key,
+              operation: "thread-archive",
+            }),
+            threadId: input.threadId,
+          })
+          .pipe(
+            Effect.mapError((error) =>
+              isThreadManagementError(error)
+                ? threadManagementFailure(error)
+                : failure(
+                    "orchestration_error",
+                    `Unable to archive thread ${input.threadId}: ${errorMessage(error)}`,
+                  ),
+            ),
+          );
+      }
+      return {
+        threadId: input.threadId,
+        archived: true,
+      } satisfies OrchestratorMcpThreadArchiveResult;
+    }),
+    unarchiveThread: Effect.fn("OrchestratorMcpService.unarchiveThread")(function* (scope, input) {
+      const { parent, target } = yield* loadScopedThread(scope, input.threadId);
+      yield* assertLiveCallerForOtherThread(scope, parent, target);
+      if (target.thread.archivedAt !== null) {
+        const key = yield* requestKey(input.clientRequestId);
+        yield* threadManagement
+          .dispatch({
+            type: "thread.unarchive",
+            commandId: stableCommandId({
+              scope,
+              requestKey: key,
+              operation: "thread-unarchive",
+            }),
+            threadId: input.threadId,
+          })
+          .pipe(
+            Effect.mapError((error) =>
+              isThreadManagementError(error)
+                ? threadManagementFailure(error)
+                : failure(
+                    "orchestration_error",
+                    `Unable to unarchive thread ${input.threadId}: ${errorMessage(error)}`,
+                  ),
+            ),
+          );
+      }
+      return {
+        threadId: input.threadId,
+        archived: false,
+      } satisfies OrchestratorMcpThreadArchiveResult;
     }),
   });
 });
