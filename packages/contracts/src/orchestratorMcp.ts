@@ -569,6 +569,19 @@ export const OrchestratorMcpThreadInterruptResult = Schema.Struct({
 });
 export type OrchestratorMcpThreadInterruptResult = typeof OrchestratorMcpThreadInterruptResult.Type;
 
+export const OrchestratorMcpThreadArchiveInput = Schema.Struct({
+  environmentId: OrchestratorMcpEnvironmentTarget,
+  threadId: ThreadId,
+  clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
+});
+export type OrchestratorMcpThreadArchiveInput = typeof OrchestratorMcpThreadArchiveInput.Type;
+
+export const OrchestratorMcpThreadArchiveResult = Schema.Struct({
+  threadId: ThreadId,
+  archived: Schema.Boolean,
+});
+export type OrchestratorMcpThreadArchiveResult = typeof OrchestratorMcpThreadArchiveResult.Type;
+
 export const OrchestratorMcpCapabilitiesInput = Schema.Struct({
   environmentId: OrchestratorMcpEnvironmentTarget,
   search: Schema.optional(
