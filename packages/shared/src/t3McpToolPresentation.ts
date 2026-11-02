@@ -21,6 +21,8 @@ export type T3McpToolSummaryAction =
   | "thread-send"
   | "thread-wait"
   | "thread-interrupt"
+  | "thread-archive"
+  | "thread-unarchive"
   | "workflow-stop"
   | "background-wait"
   | "thread-configuration"
@@ -165,6 +167,14 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_thread_interrupt: tool(
     ["Interrupt", "Interrupting", "Requested an interrupt of", "a T3 thread"],
     "thread-interrupt",
+  ),
+  t3_thread_archive: tool(
+    ["Archive", "Archiving", "Archived", "a T3 thread"],
+    "thread-archive",
+  ),
+  t3_thread_unarchive: tool(
+    ["Unarchive", "Unarchiving", "Unarchived", "a T3 thread"],
+    "thread-unarchive",
   ),
   t3_worktree_handoff: tool(
     ["Hand off", "Handing off", "Handed off", "thread to a git worktree"],
