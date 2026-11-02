@@ -166,6 +166,12 @@ export function summarizeT3ToolCalls(
         quantity(countEntities(threadIds), "thread"),
       );
       break;
+    case "thread-archive":
+      label = phrase("Archived", "archive", quantity(countEntities(threadIds), "thread"));
+      break;
+    case "thread-unarchive":
+      label = phrase("Unarchived", "unarchive", quantity(countEntities(threadIds), "thread"));
+      break;
     case "workflow-stop":
       label = phrase(
         "Requested stops for",
