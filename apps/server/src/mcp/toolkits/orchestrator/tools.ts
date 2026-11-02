@@ -24,6 +24,8 @@ import {
   OrchestratorMcpTaskCancelInput,
   OrchestratorMcpTaskCancelResult,
   OrchestratorMcpTaskStatusInput,
+  OrchestratorMcpThreadArchiveInput,
+  OrchestratorMcpThreadArchiveResult,
   OrchestratorMcpThreadInterruptInput,
   OrchestratorMcpThreadInterruptResult,
   OrchestratorMcpThreadListInput,
@@ -305,6 +307,32 @@ const ThreadInterruptTool = Tool.make("t3_thread_interrupt", {
   .annotate(Tool.Title, "Interrupt a T3 thread")
   .annotate(Tool.Destructive, true);
 
+const ThreadArchiveTool = Tool.make("t3_thread_archive", {
+  description:
+    "Archive a thread: remove it from active lists without deleting it. Its history stays readable and `t3_thread_unarchive` restores it. Archiving ends the thread's own agent access, so archive only finished threads. No effect when already archived.",
+  parameters: OrchestratorMcpThreadArchiveInput,
+  success: OrchestratorMcpThreadArchiveResult,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies,
+})
+  .annotate(Tool.Title, "Archive a T3 thread")
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.Idempotent, true);
+
+const ThreadUnarchiveTool = Tool.make("t3_thread_unarchive", {
+  description:
+    "Restore an archived thread to the active lists. No effect when the thread is not archived.",
+  parameters: OrchestratorMcpThreadArchiveInput,
+  success: OrchestratorMcpThreadArchiveResult,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies,
+})
+  .annotate(Tool.Title, "Unarchive a T3 thread")
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
 const EnvironmentLinksTool = Tool.make("t3_environment_links", {
   description:
     "List linked environments (the user's other machines) and whether each answers now. Pass one's `environmentId` to a tool to act there; `delegate_task` takes `target.environmentId`. Expired: link it again with `t3_environment_link`.",
@@ -365,6 +393,8 @@ export const OrchestratorToolkit = Toolkit.make(
   ThreadSendTool,
   ThreadWaitTool,
   ThreadInterruptTool,
+  ThreadArchiveTool,
+  ThreadUnarchiveTool,
   EnvironmentLinksTool,
   EnvironmentLinkTool,
   EnvironmentUnlinkTool,
