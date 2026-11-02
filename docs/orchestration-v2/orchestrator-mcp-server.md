@@ -454,6 +454,18 @@ Without `runId`, it selects the newest interruptible run. A terminal run is
 returned unchanged, and a thread with no active provider turn returns
 `no_active_run`.
 
+### `t3_thread_archive`
+
+Archives a thread through the normal V2 `thread.archive` command. The thread
+leaves the active lists without being deleted: its history stays readable, and
+archiving revokes the thread's own MCP credential. Archiving an already
+archived thread returns its current state unchanged.
+
+### `t3_thread_unarchive`
+
+Restores an archived thread through the normal V2 `thread.unarchive` command.
+Unarchiving a thread that is not archived returns its current state unchanged.
+
 ## Delegated Task Lifecycle
 
 The MCP server is a command ingress into V2. It does not call provider adapters
