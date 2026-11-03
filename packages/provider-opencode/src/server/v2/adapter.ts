@@ -40,6 +40,7 @@ import {
 import type * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Hex from "effect/encoding/Hex";
@@ -520,9 +521,13 @@ const isWakeTurn = (turn: OrchestrationV2ProviderTurn) =>
 
 const INTERRUPT_TIMEOUT = "10 seconds";
 const INSTRUCTIONS_KEY = "t3-code";
-const RECONNECT_ATTEMPTS = 5;
-const RECONNECT_DELAY = "2 seconds";
-const RECONCILE_TIMEOUT = "15 seconds";
+// A lost event stream holds the session's runs while reconnect retries with
+// exponential backoff inside one RECONNECT_BUDGET, sized to outlast the
+// multi-minute stalls a busy OpenCode server showed; only when it is spent
+// does the session fail, marked retryable (see failAll).
+const RECONNECT_BUDGET = "5 minutes";
+const RECONNECT_DELAY = "5 seconds";
+const RECONCILE_TIMEOUT = "60 seconds";
 const RECONNECT_WAIT = "30 seconds";
 const LOST_BACKGROUND =
   "T3 Code lost its connection to OpenCode while this subagent ran, so its result is not shown.";
@@ -2442,7 +2447,10 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       streamFailure = message;
       yield* Deferred.succeed(reconnected, undefined);
       for (const state of threads.values()) {
-        const failure = makeProviderFailure({ message, class: "transport_error" });
+        // The stream loss is T3-side and transient, never the turn's fault:
+        // mark the failure retryable so callers re-drive instead of treating
+        // the work as rejected.
+        const failure = makeProviderFailure({ message, class: "transport_error", retryable: true });
         yield* finishTurn(state, { status: "failed", failure }, "broken");
       }
       for (const state of threads.values()) {
@@ -2614,7 +2622,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       }
     });
 
-    const reconnect = Effect.gen(function* () {
+    const reconnectOnce = Effect.gen(function* () {
       // Release the borrow on every failure, including reconnect interruption, so spawned servers can idle-stop.
       const scope = yield* Scope.make();
       const { next, stream } = yield* Effect.gen(function* () {
@@ -2630,9 +2638,41 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       for (const state of threads.values()) state.mcp = undefined;
       yield* lock.withPermit(reconcile).pipe(Effect.timeout(RECONCILE_TIMEOUT));
       return stream;
-    }).pipe(
-      Effect.retry({ times: RECONNECT_ATTEMPTS - 1, schedule: Schedule.spaced(RECONNECT_DELAY) }),
-    );
+    });
+
+    // Runs stay open across the whole sequence (see RECONNECT_BUDGET); every
+    // attempt's outcome is logged, because a stall that outlasts the budget
+    // otherwise surfaces only as the final timeout.
+    const reconnect = Effect.gen(function* () {
+      let attempt = 0;
+      const counted = Effect.suspend(() => {
+        attempt += 1;
+        const current = attempt;
+        return Effect.logInfo("Reconnecting to the OpenCode event stream.", {
+          attempt: current,
+        }).pipe(
+          Effect.andThen(reconnectOnce),
+          Effect.tapCause((cause) =>
+            Effect.logWarning("An OpenCode event stream reconnect attempt failed.", cause).pipe(
+              Effect.annotateLogs({ attempt: current, errorTag: causeErrorTag(cause) }),
+            ),
+          ),
+        );
+      });
+      return yield* counted.pipe(
+        Effect.retry({
+          schedule: Schedule.exponential(RECONNECT_DELAY).pipe(
+            Schedule.modifyDelay(({ duration }) =>
+              Effect.succeed(Duration.min(duration, Duration.seconds(60))),
+            ),
+          ),
+        }),
+        Effect.timeout(RECONNECT_BUDGET),
+        Effect.tap(() =>
+          Effect.logInfo("Reconnected to the OpenCode event stream.", { attempts: attempt }),
+        ),
+      );
+    });
 
     let currentScope = initial.scope;
     yield* Effect.addFinalizer(() => Scope.close(currentScope, Exit.void));

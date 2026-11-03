@@ -2538,9 +2538,13 @@ describe("UsageService", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.live("reports saved usage of a removed directory only for windows it reaches", () =>
+  it.effect("reports saved usage of a removed directory only for windows it reaches", () =>
     Effect.gen(function* () {
       const { transcript, settings, home } = yield* setup;
+      // The fixture transcript is pinned to 2026-08-01; pin the service clock to
+      // the same era so the scan-cache retention window (92 days from "now")
+      // cannot age the fixture out as wall-clock time passes.
+      yield* TestClock.setTime(Date.parse("2026-08-05T00:00:00Z"));
       yield* Effect.promise(async () => {
         await NodeFSP.writeFile(transcript, claudeLine(1, 5));
         const lastWrite = Date.parse("2026-08-01T10:00:00Z") / 1000;
