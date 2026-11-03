@@ -2265,6 +2265,47 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
     }).pipe(Effect.scoped),
   );
 
+  // A stalled server answers nothing; each attempt's reconcile hangs until
+  // its timeout. Four stalls fit inside the new budget (the old policy spent
+  // its five attempts at a 15-second cap in about 83 seconds).
+  const stalledAttempt = [
+    out("event.subscribe"),
+    out("session.active"),
+    reply("session.active", "<hang>"),
+  ] as const;
+
+  it.effect("fails a turn as retryable only once the reconnect budget is spent", () =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        out("session.prompt", { sessionID: SESSION, id: PROMPT_ID, text: "<any>" }),
+        promptAccepted,
+        { type: "runtime_exit", status: "success" } as const,
+        ...stalledAttempt,
+        ...stalledAttempt,
+        ...stalledAttempt,
+        ...stalledAttempt,
+      ]);
+      const seen = yield* Deferred.make<boolean>();
+      const terminal = yield* terminalOf(runtime).pipe(
+        Effect.tap(() => Deferred.succeed(seen, true)),
+        Effect.forkScoped,
+      );
+      yield* runtime.startTurn(turnInput(thread));
+      // Past the old budget (~83 seconds) the turn is still held, not failed.
+      yield* TestClock.adjust("2 minutes");
+      assert.isTrue(Option.isNone(yield* Deferred.poll(seen)));
+      yield* TestClock.adjust("4 minutes");
+      const ended = yield* Fiber.join(terminal);
+      assert.equal(ended?.status, "failed");
+      assert.deepEqual(ended?.failure, {
+        class: "transport_error",
+        code: null,
+        message: "The OpenCode event stream was lost and could not reconnect.",
+        retryable: true,
+      });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("shows a permission asked while the stream was down, and answers it", () =>
     Effect.gen(function* () {
       const { runtime, thread } = yield* resumed(
