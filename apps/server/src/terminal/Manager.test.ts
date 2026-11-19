@@ -9,6 +9,7 @@ import {
   ProviderInstanceId,
   TerminalProviderInstanceNotFoundError,
 } from "@t3tools/contracts";
+import { WindowsUserBwsToken } from "@t3tools/provider-core/server/instanceEnvironment";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -24,6 +25,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Ref from "effect/Ref";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -1357,6 +1359,26 @@ it.layer(
       ]);
       expect(ptyAdapter.spawnInputs[1]?.args).toEqual(["-NoLogo"]);
       expect(ptyAdapter.spawnInputs[2]?.args).toEqual(["-NoLogo"]);
+    }),
+  );
+
+  it.effect("scopes the Windows User BWS token to terminal children", () =>
+    Effect.gen(function* () {
+      const env = { ComSpec: "C:\\Windows\\System32\\cmd.exe" };
+      const { manager, ptyAdapter } = yield* createManager(5, { env }).pipe(
+        Effect.provide(layerWithHostPlatform("win32")),
+        Effect.provideService(WindowsUserBwsToken, Redacted.make("fixture-user-token")),
+      );
+
+      yield* manager.open(openInput());
+      yield* manager.open(
+        openInput({ terminalId: "override", env: { bws_access_token: "fixture" } }),
+      );
+
+      expect(ptyAdapter.spawnInputs[0]?.env.BWS_ACCESS_TOKEN).toBe("fixture-user-token");
+      expect(ptyAdapter.spawnInputs[1]?.env.bws_access_token).toBe("fixture");
+      expect(ptyAdapter.spawnInputs[1]?.env.BWS_ACCESS_TOKEN).toBeUndefined();
+      expect(env).toEqual({ ComSpec: "C:\\Windows\\System32\\cmd.exe" });
     }),
   );
 

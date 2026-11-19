@@ -6,6 +6,10 @@ import {
   type ProviderSendTurnInput,
   type RuntimeMode,
 } from "@t3tools/contracts";
+import {
+  WindowsUserBwsToken,
+  withWindowsUserBwsToken,
+} from "@t3tools/provider-core/server/instanceEnvironment";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -50,9 +54,11 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
   EffectAcpErrors.AcpError,
   Crypto.Crypto | Scope.Scope
 > {
+  const env = withWindowsUserBwsToken(input.spawn.env, yield* WindowsUserBwsToken);
   const context = yield* Layer.build(
     AcpSessionRuntime.layer({
       ...input,
+      spawn: env === undefined ? input.spawn : { ...input.spawn, env },
       authMethodId: input.authMethod ?? "oauth-personal",
       authenticateEagerly: true,
       resumeMethod: "resume",

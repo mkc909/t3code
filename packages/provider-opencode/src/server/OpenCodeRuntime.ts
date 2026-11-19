@@ -2,6 +2,10 @@ import * as NodeURL from "node:url";
 
 import type { ChatAttachment, ProviderApprovalDecision } from "@t3tools/contracts";
 import {
+  WindowsUserBwsToken,
+  withWindowsUserBwsToken,
+} from "@t3tools/provider-core/server/instanceEnvironment";
+import {
   createOpencodeClient,
   type Agent,
   type Command,
@@ -416,6 +420,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const netService = yield* NetService.NetService;
   const hostPlatform = yield* HostProcess.Platform;
+  const windowsUserBwsToken = yield* WindowsUserBwsToken;
   const serverLedger = yield* OpenCodeServerLedger.OpenCodeServerLedger;
   const agentScope = yield* AgentScope;
   // npm's Windows shim lets the child escape libuv kill-on-close; run its executable directly.
@@ -531,7 +536,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
           detached: hostPlatform !== "win32",
           shell: spawnCommand.shell,
           env: {
-            ...input.environment,
+            ...withWindowsUserBwsToken(input.environment, windowsUserBwsToken),
             ...(serverPassword !== undefined ? { OPENCODE_SERVER_PASSWORD: serverPassword } : {}),
             // The value is set explicitly (rather than relying on inheritance) because
             // `extendEnv` is false whenever `input.environment` is provided.

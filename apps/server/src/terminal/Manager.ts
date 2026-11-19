@@ -63,7 +63,11 @@ import * as Stream from "effect/Stream";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import * as ServerConfig from "../config.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import {
+  mergeProviderInstanceEnvironment,
+  WindowsUserBwsToken,
+  withWindowsUserBwsToken,
+} from "@t3tools/provider-core/server/instanceEnvironment";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { makeClaudeEnvironment } from "../provider/Drivers/ClaudeHome.ts";
 import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
@@ -1552,6 +1556,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   const agentScope = yield* AgentScope;
   // Inherit the full environment minus createTerminalSpawnEnv's blocklist; allowlists silently drop user tooling variables.
   const baseEnv = options.env ?? process.env;
+  const windowsUserBwsToken = yield* WindowsUserBwsToken;
   const shellResolver = options.shellResolver ?? (() => defaultShellResolver(platform, baseEnv));
   const processRunner = yield* ProcessRunner.ProcessRunner;
   const resolveLaunchInputEnvironment = Effect.fn("terminal.resolveLaunchInputEnvironment")(
@@ -2465,11 +2470,14 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         Effect.andThen(
           Effect.gen(function* () {
             const shellCandidates = resolveShellCandidates(shellResolver, platform, baseEnv);
-            const terminalEnv = createTerminalSpawnEnv(
-              baseEnv,
-              session.runtimeEnv,
-              platform,
-              yield* HostProcess.HomeDirectory,
+            const terminalEnv = withWindowsUserBwsToken(
+              createTerminalSpawnEnv(
+                baseEnv,
+                session.runtimeEnv,
+                platform,
+                yield* HostProcess.HomeDirectory,
+              ),
+              windowsUserBwsToken,
             );
             // Append managed install directories so agent commands resolve without shadowing user/system tools.
             if (

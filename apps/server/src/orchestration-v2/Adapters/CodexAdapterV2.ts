@@ -118,7 +118,11 @@ import {
 } from "../../provider/EventNdjsonLogger.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import { codexAppServerArgs, resolveCodexLaunchArgs } from "../../provider/codexLaunchArgs.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import {
+  mergeProviderInstanceEnvironment,
+  WindowsUserBwsToken,
+  withWindowsUserBwsToken,
+} from "@t3tools/provider-core/server/instanceEnvironment";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import {
@@ -1394,9 +1398,10 @@ export const makeCodexAppServerSpawnCommand = Effect.fn(
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.extendEnv === undefined ? {} : { extendEnv: input.extendEnv }),
   });
+  const env = withWindowsUserBwsToken(input.env, yield* WindowsUserBwsToken);
   return ChildProcess.make(spawnCommand.command, spawnCommand.args, {
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-    ...(input.env === undefined ? {} : { env: input.env }),
+    ...(env === undefined ? {} : { env }),
     ...(input.extendEnv === undefined ? {} : { extendEnv: input.extendEnv }),
     shell: spawnCommand.shell,
   });

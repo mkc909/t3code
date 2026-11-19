@@ -5,12 +5,14 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, expect, it } from "@effect/vitest";
+import { WindowsUserBwsToken } from "@t3tools/provider-core/server/instanceEnvironment";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Redacted from "effect/Redacted";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as ServerConfig from "../config.ts";
@@ -169,6 +171,26 @@ const launchCodex = (scope: Effect.Success<typeof make>, threadId: string) =>
   );
 
 describe("AgentScope service", () => {
+  it.effect("passes the Windows User BWS token to the Codex worker's spawn environment", () =>
+    Effect.gen(function* () {
+      const env = { PATH: "C:\\Windows\\System32" };
+      const command = yield* makeCodexAppServerSpawnCommand({
+        command: "codex.exe",
+        args: ["app-server"],
+        env,
+        extendEnv: false,
+      });
+
+      assert(ChildProcess.isStandardCommand(command));
+      expect(command.options.env?.BWS_ACCESS_TOKEN).toBe("fixture-user-token");
+      expect(env).toEqual({ PATH: "C:\\Windows\\System32" });
+    }).pipe(
+      Effect.provideService(HostProcess.Platform, "win32"),
+      Effect.provideService(WindowsUserBwsToken, Redacted.make("fixture-user-token")),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+
   it.effect("labels a thread from its newest scope until its next session clears it", () =>
     withFakeSystemd(({ scope, units }) =>
       Effect.gen(function* () {

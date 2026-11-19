@@ -1,3 +1,4 @@
+import { WindowsUserBwsToken } from "@t3tools/provider-core/server/instanceEnvironment";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -8,6 +9,7 @@ import * as CliError from "effect/cli/CliError";
 
 import * as ServerConfig from "../config.ts";
 import { awaitLauncherLoss } from "../launcherWatch.ts";
+import { loadWindowsUserBwsToken } from "../process/workstationCredentials.ts";
 import { runServer } from "../server.ts";
 import { type CliServerFlags, resolveServerConfig, sharedServerCommandFlags } from "./config.ts";
 
@@ -30,7 +32,12 @@ const runServerCommand = Effect.fn("server.runServerCommand")(function* (
 ) {
   const logLevel = yield* GlobalFlag.LogLevel;
   const config = yield* resolveServerConfig(flags, logLevel, options);
-  const run = runServer.pipe(Effect.provideService(ServerConfig.ServerConfig, config));
+  const environment = yield* HostProcess.Environment;
+  const platform = yield* HostProcess.Platform;
+  const run = Effect.promise(() => loadWindowsUserBwsToken(environment, platform)).pipe(
+    Effect.flatMap((token) => runServer.pipe(Effect.provideService(WindowsUserBwsToken, token))),
+    Effect.provideService(ServerConfig.ServerConfig, config),
+  );
   if (config.mode !== "desktop" || config.desktopBootstrapToken === undefined) return yield* run;
   yield* Effect.sync(() => {
     process.stdout.on("error", ignoreClosedLauncherPipe);

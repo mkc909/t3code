@@ -267,6 +267,20 @@ For a cross-architecture or universal build, add the requested Rust targets:
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ```
 
+### Bitwarden credentials on Windows
+
+When the T3 server starts on Windows, it checks for an inherited `BWS_ACCESS_TOKEN`.
+If the token is missing, T3 reads it from the current Windows user's environment
+and passes it to new Codex, OpenCode, and Antigravity workers and T3-managed
+terminals. Agent commands are subject to the provider's own shell policy.
+
+From a T3 terminal or agent shell in this checkout, run `npm run check:credentials`
+to verify that the token reached the shell. The command reports presence only.
+For a task that needs Bitwarden-managed secrets, use
+`bws run --uuids-as-keynames -- <command>`. Run the existing
+`npm run check:credentials` from the Ops OS checkout for workstation-wide
+checks, including Wrangler and myMCP.
+
 ### Windows installer prerequisites
 
 Install Rust, Python 3, and Visual Studio Build Tools with **Desktop development with C++**.

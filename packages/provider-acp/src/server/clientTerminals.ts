@@ -1,3 +1,7 @@
+import {
+  WindowsUserBwsToken,
+  withWindowsUserBwsToken,
+} from "@t3tools/provider-core/server/instanceEnvironment";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -150,6 +154,7 @@ export const makeAcpClientTerminals = Effect.fn("makeAcpClientTerminals")(functi
   options: AcpClientTerminalsOptions,
 ): Effect.fn.Return<AcpClientTerminals, never, ChildProcessSpawner.ChildProcessSpawner> {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const windowsUserBwsToken = yield* WindowsUserBwsToken;
   const forceKillAfter = options.forceKillAfter ?? "5 seconds";
   const creationPermit = yield* Semaphore.make(1);
   const terminals = new Map<string, ManagedAcpTerminal>();
@@ -231,7 +236,7 @@ export const makeAcpClientTerminals = Effect.fn("makeAcpClientTerminals")(functi
                   request,
                   shellCommands: options.shellCommands,
                   defaultCwd: options.defaultCwd,
-                  environment,
+                  environment: withWindowsUserBwsToken(environment, windowsUserBwsToken),
                   forceKillAfter,
                 }),
               )
